@@ -24,7 +24,6 @@ fn inplace_sort<T: Ord + fmt::Debug>(items: &mut Vec<T>) {
     for i in 0..(items.len() - 1) {
         let (index_of_min, _) = items
             .iter()
-            // TODO placing skip before enumerate doesn't work, seems to not skip then, why?
             .enumerate()
             .skip(i)
             .min_by(|(_, item1), (_, item2)| (item1).cmp(item2))
