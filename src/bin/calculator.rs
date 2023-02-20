@@ -1,126 +1,96 @@
-use std::error::Error;
 use std::io::{self, BufRead, Write};
-use std::{fmt, process};
+use std::iter::Iterator;
+use std::process;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     let mut stack: Vec<f64> = Vec::new();
-    print_cmd_head();
-    for line_result in io::stdin().lock().lines() {
-        let line =
-            line_result.map_err(|err| ParserError(format!("Failed to read stdin: {err}")))?;
+    let command_results = io::stdin().lock().lines().map(|line_result| {
+        parse_line(line_result.expect("Failed to read stdin"))
+            .and_then(|command| handle_command(&mut stack, command))
+    });
 
-        match parse_line(line) {
-            Ok(token) => handle_token(&mut stack, token),
-            Err(err) => println!("{err}"),
-        };
-
-        print_cmd_head();
+    print_cli_head();
+    for result in command_results {
+        if let Err(err) = result {
+            println!("{err}");
+        }
+        print_cli_head();
     }
-    Ok(())
 }
 
-fn parse_line(line: String) -> Result<Token, ParserError> {
+fn parse_line(line: String) -> Result<Command, String> {
     match line.as_str() {
-        "quit" | "q" => Ok(Token::Quit),
-        "dump" | "d" => Ok(Token::Dump),
-        "+" => Ok(Token::Add),
-        "-" => Ok(Token::Subtract),
-        "*" => Ok(Token::Multiply),
-        "/" => Ok(Token::Divide),
+        "quit" | "q" => Ok(Command::Quit),
+        "dump" | "d" => Ok(Command::Dump),
+        "+" => Ok(Command::Add),
+        "-" => Ok(Command::Subtract),
+        "*" => Ok(Command::Multiply),
+        "/" => Ok(Command::Divide),
         _ => match line.parse() {
-            Ok(number) => Ok(Token::Number(number)),
-            Err(_) => Err(ParserError(format!(
-                "Unknown command or invalid float: {line}"
-            ))),
+            Ok(number) => Ok(Command::PushNumber(number)),
+            Err(_) => Err(format!("Unknown command or invalid float: {line}")),
         },
     }
 }
 
-fn handle_token(stack: &mut Vec<f64>, token: Token) {
-    let result = match token {
-        Token::Quit => {
+fn handle_command(stack: &mut Vec<f64>, command: Command) -> Result<(), String> {
+    match command {
+        Command::Quit => {
             println!("K, bye");
             process::exit(0);
         }
-        Token::Dump => {
-            dump_stack(&stack);
+        Command::Dump => {
+            print_stack(&stack);
             Ok(())
         }
-        Token::Number(number) => Ok(stack.push(number)),
-        Token::Add => {
+        Command::PushNumber(number) => Ok(stack.push(number)),
+        Command::Add => {
             // I miss inheritance, maybe traits will help
             apply_binary_operator(stack, |a, b| Ok(a + b))
         }
-        Token::Subtract => {
-            apply_binary_operator(stack, |a, b| Ok(a - b))
-        }
-        Token::Multiply => {
-            apply_binary_operator(stack, |a, b| Ok(a * b))
-        }
-        Token::Divide => {
+        Command::Subtract => apply_binary_operator(stack, |a, b| Ok(a - b)),
+        Command::Multiply => apply_binary_operator(stack, |a, b| Ok(a * b)),
+        Command::Divide => {
             // TODO handle divide by zero
             apply_binary_operator(stack, |a, b| Ok(a / b))
         }
-    };
-    if let Err(err) = result {
-        println!("{err}");
     }
 }
 
-fn apply_binary_operator<F: Fn(f64, f64) -> Result<f64, CalculatorError>>(
+fn apply_binary_operator<F: Fn(f64, f64) -> Result<f64, String>>(
     stack: &mut Vec<f64>,
     calculate: F,
-) -> Result<(), CalculatorError> {
+) -> Result<(), String> {
     match stack.len() {
-        0 => Err(CalculatorError("The stack is empty!".to_string())),
-        1 => Err(CalculatorError("Only 1 number on the stack!".to_string())),
+        0 => Err("The stack is empty!".to_string()),
+        1 => Err("Only 1 number on the stack!".to_string()),
         _ => {
             let number2 = stack.pop().expect("Got at least 2 numbers");
             let number1 = stack.pop().expect("Still got at least 1 number");
             stack.push(calculate(number1, number2)?);
-            dump_stack(&stack);
+            print_stack(&stack);
             Ok(())
         }
     }
 }
 
-fn print_cmd_head() -> () {
+fn print_cli_head() -> () {
     print!("> ");
-    io::stdout()
-        .flush()
-        .expect("Don't bother handling as print! probably doesn't either");
+    io::stdout().flush().expect("Failed to flush stdout");
 }
 
-fn dump_stack(stack: &Vec<f64>) -> () {
+fn print_stack(stack: &Vec<f64>) -> () {
     for number in stack {
         println!("{number}");
     }
 }
 
-enum Token {
+enum Command {
     Quit,
     Dump,
     Add,
     Subtract,
     Multiply,
     Divide,
-    Number(f64),
-}
-
-#[derive(Debug)]
-struct ParserError(String);
-impl Error for ParserError {}
-impl fmt::Display for ParserError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.0.as_str())
-    }
-}
-
-#[derive(Debug)]
-struct CalculatorError(String);
-impl Error for CalculatorError {}
-impl fmt::Display for CalculatorError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.0.as_str())
-    }
+    PushNumber(f64),
 }
