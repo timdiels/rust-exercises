@@ -23,7 +23,7 @@ fn main() {
 }
 
 fn parse_line(line: String) -> Result<Command, String> {
-    match line.as_str() {
+    match line.trim() {
         "quit" | "q" => Ok(Command::Quit),
         "dump" | "d" => Ok(Command::Dump),
         "+" => Ok(Command::PerformBinaryCalculation(Box::new(Add))),
